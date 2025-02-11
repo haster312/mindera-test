@@ -12,10 +12,21 @@ export default function ProductFilter() {
         { key: "LOW_TO_HIGH", label: "Price Lowest to Highest" },
     ];
 
+    const showSortText = (): string => {
+        switch (sortOrder) {
+            case "HIGH_TO_LOW":
+                return "Price Highest to Lowest";
+            case "LOW_TO_HIGH":
+                return "Price Lowest to Highest";
+            default:
+                return "";
+        }
+    }
+
     return (
         <div className={styles.productFilter}>
             <div className={styles.sort}>
-                <span onClick={() => setIsSortVisible(!isSortVisible)}>Sort</span>
+                <span onClick={() => setIsSortVisible(!isSortVisible)}>Sort: { showSortText() }</span>
                 {
                     isSortVisible ?
                         <div className={styles.sortOption}>

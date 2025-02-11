@@ -1,0 +1,43 @@
+query ProductQuery(
+  $first: Int!
+  $after: String
+  $sortKey: ProductSortKeys
+  $reverse: Boolean
+) {
+  products(first: $first, after: $after, sortKey: $sortKey, reverse: $reverse) {
+    edges {
+      node {
+        id
+        title
+        description
+        availableForSale
+        images(first: 1) {
+          edges {
+            node {
+              src
+              altText
+            }
+          }
+        }
+        variants(first: 1) {
+          edges {
+            node {
+              price {
+                amount
+                currencyCode
+              }
+              compareAtPrice {
+                amount
+                currencyCode
+              }
+            }
+          }
+        }
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}

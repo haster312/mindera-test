@@ -1,7 +1,7 @@
 import { useShopifyProduct} from "@/context/product/product.provider";
-import ProductItem from "./product-item.tsx";
 import styles from '@/app/product/product.module.scss';
 import { Button } from "@heroui/button";
+import ProductItem from "@/components/product/product-item";
 
 export default function ProductList() {
     const { products, fetchProducts, hasNextPage, loading } = useShopifyProduct();

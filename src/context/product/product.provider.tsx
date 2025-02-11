@@ -1,13 +1,6 @@
 "use client";
-import {createContext, ReactNode, useContext, useEffect, useState, useCallback, useRef} from "react";
-import { createStorefrontApiClient } from '@shopify/storefront-api-client';
-
-const client = createStorefrontApiClient({
-    storeDomain: `https://${process.env.NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN}.myshopify.com`,
-    apiVersion: '2025-04',
-    publicAccessToken: process.env.NEXT_PUBLIC_SHOPIFY_PUBLIC_ACCESS_TOKEN!,
-    retries: 2,
-});
+import { createContext, ReactNode, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { ProductQueryDocument, ProductQueryQueryVariables, ProductSortKeys } from "@/generated/graphql";
 
 type MoneyV2 = {
     amount: number,
@@ -18,8 +11,9 @@ interface Product {
     id: string;
     title: string;
     description: string;
+    availableForSale: boolean;
     images: { edges: { node: { src: string; altText: string } }[] };
-    variants: { edges: { node: { price: MoneyV2 } }[] };
+    variants: { edges: { node: { price: MoneyV2, compareAtPrice: MoneyV2 } }[] };
 }
 
 export interface ConvertProduct {
@@ -27,6 +21,7 @@ export interface ConvertProduct {
     title: string;
     description?: string;
     price: number;
+    originalPrice?: number;
     currency: string;
     imageUrl?: string;
     altText?: string;
@@ -46,12 +41,6 @@ interface ShopifyProductContextType {
 
 const ShopifyProductContext = createContext<ShopifyProductContextType | undefined>(undefined);
 
-type QueryVariable = {
-    first: number;
-    after: string | null;
-    sortKey?: string | null;
-    reverse?: boolean;
-}
 export const ProductProvider = ({children}: { children: ReactNode }) => {
     const [products, setProducts] = useState<ConvertProduct[]>([]);
     const [sortOrder, setSortOrder] = useState<SortOrder>("");
@@ -60,81 +49,49 @@ export const ProductProvider = ({children}: { children: ReactNode }) => {
     const [hasNextPage, setHasNextPage] = useState<boolean>(false);
 
     const changeFilter = async (orderType: string) => {
-        try {
-            // Always reset cursor if filter changed
-            cursorRef.current = null;
-            setSortOrder(orderType as SortOrder);
-        } catch (e) {
-            throw new Error(e.message);
-        }
+        // Always reset cursor if filter changed
+        cursorRef.current = null;
+        setSortOrder(orderType as SortOrder);
     }
 
     const fetchProducts = useCallback(async (nextPage = false) => {
         setLoading(true);
         try {
-            const productQuery = `
-              query ProductQuery($first: Int!, $after: String, $sortKey: ProductSortKeys, $reverse: Boolean) {
-                products(first: $first, after: $after, sortKey: $sortKey, reverse: $reverse) {
-                  edges {
-                    node {
-                      id
-                      title
-                      description
-                      images(first: 1) {
-                        edges {
-                          node {
-                            src
-                            altText
-                          }
-                        }
-                      }
-                      variants(first: 1) {
-                        edges {
-                          node {
-                            price {
-                               amount
-                               currencyCode 
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                  pageInfo {
-                    hasNextPage
-                    endCursor
-                  }
-                }
-              }
-            `;
-
-            const variables: QueryVariable = {
+            const variables: ProductQueryQueryVariables = {
                 first: 10,
                 after: nextPage ? cursorRef.current : null,
-                sortKey: sortOrder ? "PRICE" : undefined,
+                sortKey: sortOrder ? ProductSortKeys.Price : undefined,
                 reverse: sortOrder === "HIGH_TO_LOW",
             };
 
-            const { data, errors } = await client.request(productQuery, { variables });
-            if (errors) return;
+            const response = await fetch("/api/shopify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: ProductQueryDocument, variables }),
+            });
 
-            const fetchedProducts: ConvertProduct[] = data.products.edges.map((edge: { node: Product }) => {
-                const node = edge.node;
-                return {
-                    id: node.id,
-                    title: node.title,
-                    description: node.description,
-                    price: node.variants.edges[0]?.node?.price.amount || 0,
-                    currency: node.variants.edges[0]?.node?.price.currencyCode || "USD",
-                    imageUrl: node.images.edges[0]?.node?.src || "",
-                    altText: node.images.edges[0]?.node?.altText || "",
-                };
+            const { products } = await response.json();
+
+            const fetchedProducts: ConvertProduct[] = products.edges
+                .filter((edge: { node: Product }) => edge.node.availableForSale)
+                .map((edge: { node: Product }) => {
+                    const node = edge.node;
+                    return {
+                        id: node.id,
+                        title: node.title,
+                        description: node.description,
+                        price: node.variants.edges[0]?.node?.price.amount || 0,
+                        originalPrice: node.variants.edges[0]?.node?.compareAtPrice?.amount || null,
+                        currency: node.variants.edges[0]?.node?.price.currencyCode || "USD",
+                        imageUrl: node.images.edges[0]?.node?.src || "",
+                        altText: node.images.edges[0]?.node?.altText || "",
+                    };
             });
 
             setProducts(p => nextPage ? [...p, ...fetchedProducts] : fetchedProducts);
-            cursorRef.current = data.products.pageInfo.endCursor;
+            cursorRef.current = products.pageInfo.endCursor;
 
-            setHasNextPage(data.products.pageInfo.hasNextPage);
+            setHasNextPage(products.pageInfo.hasNextPage);
         } catch (error) {
             console.error("Error fetching Shopify products:", error);
         } finally {

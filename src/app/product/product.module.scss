@@ -30,8 +30,26 @@ $paddingSize: 16px;
 
   .productImage {
     width: 100%;
-    height: auto;
+    min-height: 200px;
     margin: 0 auto;
+  }
+
+  .productTitle {
+    font-size: 14px;
+    font-weight: bold;
+    margin-top: 5px;
+    margin-bottom: 5px;
+  }
+
+  .productPrice {
+    font-size: 18px;
+    font-weight: 500;
+
+    .originalPrice {
+      margin-right: 10px;
+      color: red;
+      text-decoration: line-through;
+    }
   }
 }
 
